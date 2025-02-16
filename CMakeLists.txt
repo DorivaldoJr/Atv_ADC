@@ -57,6 +57,8 @@ target_include_directories(Atv_ADC PRIVATE
 # Add any user requested libraries
 target_link_libraries(Atv_ADC 
         hardware_i2c
+        hardware_pwm
+        hardware_adc
         )
 
 pico_add_extra_outputs(Atv_ADC)

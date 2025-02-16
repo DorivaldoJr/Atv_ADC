@@ -5,20 +5,40 @@
 #include "inc/ssd1306.h"
 #include "inc/font.h"
 #include "pico/bootrom.h"
+#include "hardware/pwm.h"
+#include "hardware/adc.h"
 
 #define I2C_PORT i2c1
 #define I2C_SDA 14
 #define I2C_SCL 15
 #define endereco 0x3c
+
 #define GPIO_BUTTON_A 5
 #define GPIO_BUTTON_B 6 // para o modo bootloader
 #define GPIO_LED_GREEN 11
 #define GPIO_LED_RED 13
 #define GPIO_LED_BLUE 12
 #define BUTTON_JOY 22
+
+const uint16_t PERIODO = 4095; // periodo do pwm de acrodo com a faixa de atuacao do joystick
+const float DIVISOR = 15; // divisor fracionario do pwm
+
+#define VRX_PIN 26
+#define VRY_PIN 27
+
 ssd1306_t ssd; //inicializa a estrutura do display, esta aqui para evitar um erro na compilacao
 
-void setup_led_and_button() {
+void setup_pwm(uint pin){ // inicializa e configura o pwm
+  uint slice;
+  gpio_set_function(pin, GPIO_FUNC_PWM);// Configura o pino do LED para função PWM
+  slice = pwm_gpio_to_slice_num(pin); // obtendo o numeor do slice de cada pino
+  pwm_set_clkdiv(slice, DIVISOR); // setando o divisor de clock
+  pwm_set_wrap(slice, PERIODO); // configurando o periodo
+  pwm_set_gpio_level(pin, 0); // inicialmente apagado 
+  pwm_set_enabled(slice, true); // habilitando o pwm
+}
+
+void setup_led_and_button() { // para iniciar e configurar os botes e leds
     // Inicializa e configura o boatao A
     gpio_init(GPIO_BUTTON_A);
     gpio_set_dir(GPIO_BUTTON_A,GPIO_IN);
@@ -35,10 +55,7 @@ void setup_led_and_button() {
     // inicializa e configura os leds 
     gpio_init(GPIO_LED_GREEN);
     gpio_set_dir(GPIO_LED_GREEN,GPIO_OUT);
-    gpio_init(GPIO_LED_RED);
-    gpio_set_dir(GPIO_LED_RED,GPIO_OUT);
-    gpio_init(GPIO_LED_BLUE);
-    gpio_set_dir(GPIO_LED_BLUE,GPIO_OUT);
+
 }
 int64_t display_basico(alarm_id_t id, void *user_data);
 
@@ -67,9 +84,11 @@ void gpio_irq_handler(uint gpio, uint32_t events){
        
         add_alarm_in_ms(800, display_basico, NULL, false);
         }
-    } else if (gpio == GPIO_BUTTON_B){
+    } if (gpio == GPIO_BUTTON_B){
         printf("Ativando modo de gravacao!\n");
         reset_usb_boot(0,0);
+    } else if (gpio == GPIO_BUTTON_A){
+        
     }
 }
 
@@ -86,7 +105,13 @@ int main()
 {
     stdio_init_all(); //inicialia a comunicacao serial
     setup_led_and_button(); //inicializa os leds e o botao A
-    
+    setup_pwm(GPIO_LED_BLUE); // configura o pwm para o led azul
+    setup_pwm(GPIO_LED_RED); // configura o pwm para o led vermelho
+
+    adc_init();
+    adc_gpio_init(VRX_PIN);
+    adc_gpio_init(VRY_PIN);
+
     //Inicializacao e configuracao do I2C
     i2c_init(I2C_PORT, 400 * 1000);
     gpio_set_function(I2C_SDA, GPIO_FUNC_I2C); // configura o pino gpio para a funcao serial data line do i2c
@@ -107,9 +132,19 @@ int main()
     //interrupcao do botao do joystick
     gpio_set_irq_enabled_with_callback(BUTTON_JOY, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
     gpio_set_irq_enabled(GPIO_BUTTON_B, GPIO_IRQ_EDGE_FALL, true); // para acionar o bootloader no botao B
-    
+    gpio_set_irq_enabled(GPIO_BUTTON_A, GPIO_IRQ_EDGE_FALL, true);
+
+    uint16_t faixa_led_apagado = 16; // uma faixa segura para corrigir o erro de centro do joystick
     while (true) {
-       printf ("aguardando sinais...\n");
-       sleep_ms(2000);
+       adc_select_input(1);
+       uint16_t valor_x = adc_read(); // le o valor do eixo x do joystick
+       uint16_t dutty_cycle_x = (abs(valor_x - 2048)> faixa_led_apagado) ? abs(valor_x - 2048) : 0; // calcula a distancia sem sinal negativo ate o centro 
+       pwm_set_gpio_level(GPIO_LED_RED, dutty_cycle_x);
+
+       adc_select_input(0);
+       uint16_t valor_y = adc_read(); // le o valor do eixo y do joystick
+       uint16_t dutty_cycle_y = (abs(valor_y - 2048)> faixa_led_apagado) ? abs(valor_y - 2048) : 0; // calcula a distancia sem sinal negativo ate o centro 
+       pwm_set_gpio_level(GPIO_LED_BLUE, dutty_cycle_y);
+
    }
  }
