@@ -114,6 +114,19 @@ void ssd1306_rect(ssd1306_t *ssd, uint8_t top, uint8_t left, uint8_t width, uint
   }
 }
 
+void draw_centered_square(ssd1306_t *ssd, int x, int y, int size, bool value) {
+    // Corrige o ponto de início para centralizar o quadrado
+    int start_x = x - (size / 2);
+    int start_y = y - (size / 2);
+
+    if (start_x < 0) start_x = 0;
+    if (start_y < 0) start_y = 0;
+    if (start_x + size > 128) start_x = 128 - size;
+    if (start_y + size > 64) start_y = 64 - size;
+
+    ssd1306_rect(ssd, start_y, start_x, size, size, value, true); 
+}
+
 void ssd1306_line(ssd1306_t *ssd, uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1, bool value) {
     int dx = abs(x1 - x0);
     int dy = abs(y1 - y0);

@@ -22,7 +22,9 @@
 
 const uint16_t PERIODO = 4095; // periodo do pwm de acrodo com a faixa de atuacao do joystick
 const float DIVISOR = 15; // divisor fracionario do pwm
-
+    
+volatile bool anima_ativa = false;
+volatile bool quadrado_visivel = true;
 #define VRX_PIN 26
 #define VRY_PIN 27
 
@@ -57,23 +59,26 @@ void setup_led_and_button() { // para iniciar e configurar os botes e leds
     gpio_set_dir(GPIO_LED_GREEN,GPIO_OUT);
 
 }
-int64_t display_basico(alarm_id_t id, void *user_data);
+
 
 // callback da interrupcao do botao do joystick
 static volatile uint32_t last_time = 0;
 bool estado_led_green = false;
-
+ bool habilidato = true;
 void gpio_irq_handler(uint gpio, uint32_t events){
     uint32_t current_time = to_us_since_boot(get_absolute_time());
+    
     
     if (gpio == BUTTON_JOY) {
         if (current_time - last_time>200000){ //200 ms de deboucing
             last_time = current_time; // atualiza o tempo do ultimo evento
             estado_led_green= !estado_led_green;
             gpio_put(GPIO_LED_GREEN, estado_led_green); // atualiza o estado do led
-    
+            quadrado_visivel = false;
+            anima_ativa = false;
             //mudanca na borda do display
             // limpa o display e inicializa a moldura grossa
+           for (int i= 0; i<= 5; i++){
             ssd1306_fill(&ssd,false);
             ssd1306_rect(&ssd, 0, 0, 128, 64, true, false);
             ssd1306_rect(&ssd, 1, 1, 126, 62, true, false);
@@ -81,25 +86,20 @@ void gpio_irq_handler(uint gpio, uint32_t events){
             ssd1306_rect(&ssd, 3, 3, 122, 58, true, false);
             ssd1306_rect(&ssd, 4, 4, 120, 56, true, false);
             ssd1306_send_data(&ssd);
-       
-        add_alarm_in_ms(800, display_basico, NULL, false);
+           }
+          anima_ativa = true;
+          quadrado_visivel = true;  // Quadrado continua visível após animação
         }
     } if (gpio == GPIO_BUTTON_B){
         printf("Ativando modo de gravacao!\n");
         reset_usb_boot(0,0);
     } else if (gpio == GPIO_BUTTON_A){
-        
+       habilidato = !habilidato;
+        pwm_set_enabled(6, habilidato);
     }
 }
 
-// alarme para voltar o display normal depois do acionamento do botao
-int64_t display_basico(alarm_id_t id, void *user_data){
-    
-    ssd1306_fill(&ssd,false);
-    ssd1306_rect(&ssd, 3, 3, 122, 58, true, false); // desenha o quadrado basico
-    ssd1306_send_data(&ssd);
-    return 0;
-}
+
 
 int main()
 {
@@ -124,10 +124,7 @@ int main()
     ssd1306_config(&ssd);
     ssd1306_send_data(&ssd);
 
-    // limpa o display e inicializa apagado
-    ssd1306_fill(&ssd,false);
-    ssd1306_rect(&ssd, 3, 3, 122, 58, true, false); // desenha o quadrado basico
-    ssd1306_send_data(&ssd);
+
 
     //interrupcao do botao do joystick
     gpio_set_irq_enabled_with_callback(BUTTON_JOY, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
@@ -135,8 +132,13 @@ int main()
     gpio_set_irq_enabled(GPIO_BUTTON_A, GPIO_IRQ_EDGE_FALL, true);
 
     uint16_t faixa_led_apagado = 16; // uma faixa segura para corrigir o erro de centro do joystick
+    int centro_display_x = 128  / 2;  // Centro X ajustado
+    int centro_display_y = 64 / 2;   // Centro Y ajustado
+    
+
     while (true) {
-       adc_select_input(1);
+      if(anima_ativa)
+      adc_select_input(1);
        uint16_t valor_x = adc_read(); // le o valor do eixo x do joystick
        uint16_t dutty_cycle_x = (abs(valor_x - 2048)> faixa_led_apagado) ? abs(valor_x - 2048) : 0; // calcula a distancia sem sinal negativo ate o centro 
        pwm_set_gpio_level(GPIO_LED_RED, dutty_cycle_x);
@@ -145,6 +147,27 @@ int main()
        uint16_t valor_y = adc_read(); // le o valor do eixo y do joystick
        uint16_t dutty_cycle_y = (abs(valor_y - 2048)> faixa_led_apagado) ? abs(valor_y - 2048) : 0; // calcula a distancia sem sinal negativo ate o centro 
        pwm_set_gpio_level(GPIO_LED_BLUE, dutty_cycle_y);
+
+
+     // Ampliando a movimentação com direção corrigida
+     int deslocamento_x = (2048 - valor_x) / 70;  // Invertendo o eixo X
+     int deslocamento_y = (2048 - valor_y) / 80;  // Invertendo o eixo Y
+
+    // Limites ajustados para garantir que o quadrado não ultrapasse a borda
+    int novo_x = centro_display_x + deslocamento_x;
+    int novo_y = centro_display_y + deslocamento_y;
+
+    if (novo_x < 0) novo_x = 0;
+    if (novo_x > 119) novo_x = 119;  // 128 - 9 para borda
+    if (novo_y < 0) novo_y = 0;
+    if (novo_y > 55) novo_y = 55;    // 64 - 9 para borda
+    
+    if (quadrado_visivel) {
+    ssd1306_fill(&ssd, false);
+    draw_centered_square(&ssd, novo_x, novo_y, 8, true);  // Usa a função corrigida
+    ssd1306_rect(&ssd, 0, 0, 128, 60, true, false);        // Borda do display
+    ssd1306_send_data(&ssd);
+    }
 
    }
  }

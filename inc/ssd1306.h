@@ -49,3 +49,4 @@ void ssd1306_draw_char(ssd1306_t *ssd, char c, uint8_t x, uint8_t y);
 void ssd1306_draw_string(ssd1306_t *ssd, const char *str, uint8_t x, uint8_t y);
 void ssd1306_draw_char_min(ssd1306_t *ssd, char c, uint8_t x, uint8_t y);
 void ssd1306_draw_string_min(ssd1306_t *ssd, const char *str, uint8_t x, uint8_t y);
+void draw_centered_square(ssd1306_t *ssd, int x, int y, int size, bool value);
