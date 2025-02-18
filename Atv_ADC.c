@@ -27,7 +27,7 @@ const float DIVISOR = 15; // Divisor fracionario do pwm
 
 
 // Variaveis de controle das animacoes da borda e quadrado central
-
+volatile bool animacao = true;
 volatile bool quadrado_visivel = true;
 
 //Definicoes de pinos para leitura do joystick
@@ -90,7 +90,7 @@ void gpio_irq_handler(uint gpio, uint32_t events){
             gpio_put(GPIO_LED_GREEN, estado_led_green); // atualiza o estado do led
 
             quadrado_visivel = false; // Desativa a animacao da borda fina inicial, para a animacao da morda maior
-            
+            animacao= false; // Desativa a captacao de dados por um breve instante
 
             // limpa o display e inicializa a mudanca na borda
             for (int i= 0; i<= 5; i++){
@@ -103,7 +103,7 @@ void gpio_irq_handler(uint gpio, uint32_t events){
             ssd1306_send_data(&ssd);
             }
            
-          
+           animacao= true; // Ativa novamente a captacao de dados
            quadrado_visivel = true;  // Quadrado continua visível após animação
         }
     } if (gpio == GPIO_BUTTON_B){ // Funcionalidade extra para acionamento do modo bootloader
@@ -166,7 +166,7 @@ int main()
     
 
       while (true) {
-       
+          if (animacao){
           adc_select_input(1); //Adiciona o canal de entrada do ADC
           uint16_t valor_x = adc_read(); // le o valor do eixo x do joystick
           uint16_t dutty_cycle_x = (abs(valor_x - 2048)> faixa_led_apagado) ? abs(valor_x - 2048) : 0; // calcula a distancia sem sinal negativo ate o centro 
@@ -196,6 +196,7 @@ int main()
             draw_centered_square(&ssd, novo_x, novo_y, 8, true);  // Usa a função nova de criacao de borda (sem bugs)
             ssd1306_rect(&ssd, 0, 0, 128, 60, true, false);        // Borda do display fina defaut
             ssd1306_send_data(&ssd); // Atualiza o display
+          }
           }
         
       }  
